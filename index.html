@@ -2,24 +2,19 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lotto Number Generator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Airplane Dodge Game</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <h1>Lotto Number Generator</h1>
-        <div class="lotto-numbers">
-            <!-- Numbers will be generated here -->
-        </div>
-        <div class="controls">
-            <button id="generate-btn">Generate Numbers</button>
+    <div id="game-container">
+        <div id="ui">
+            <div id="score">Score: 0</div>
+            <div id="high-score">High Score: 0</div>
+            <button id="start-btn">Start Game</button>
             <button id="theme-toggle">Dark Mode</button>
         </div>
-        <div class="history">
-            <h2>History</h2>
-            <ul id="history-list"></ul>
-        </div>
+        <canvas id="gameCanvas"></canvas>
     </div>
     <script src="main.js"></script>
 </body>
