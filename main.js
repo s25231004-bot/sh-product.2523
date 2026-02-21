@@ -43,7 +43,7 @@ const player = {
     y: gameHeight / 2,
     width: 60,
     height: 40,
-    speed: 5,
+    speed: 8, // Increased speed for better responsiveness
     color: '#ffeb3b',
     draw() {
         ctx.save();
@@ -144,12 +144,18 @@ function handleJoystick(e) {
 }
 
 joystickContainer.addEventListener('mousedown', (e) => {
-    joystickActive = true;
-    handleJoystick(e);
+    if (gameRunning) {
+        joystickActive = true;
+        isShooting = true; // Enable shooting while using joystick
+        handleJoystick(e);
+    }
 });
 joystickContainer.addEventListener('touchstart', (e) => {
-    joystickActive = true;
-    handleJoystick(e);
+    if (gameRunning) {
+        joystickActive = true;
+        isShooting = true; // Enable shooting while using joystick
+        handleJoystick(e);
+    }
     e.preventDefault();
 }, { passive: false });
 
@@ -158,11 +164,13 @@ window.addEventListener('touchmove', handleJoystick, { passive: false });
 
 window.addEventListener('mouseup', () => {
     joystickActive = false;
+    isShooting = false; // Stop shooting when released
     joystickVector = { x: 0, y: 0 };
     joystickHandle.style.transform = `translate(-50%, -50%)`;
 });
 window.addEventListener('touchend', () => {
     joystickActive = false;
+    isShooting = false; // Stop shooting when released
     joystickVector = { x: 0, y: 0 };
     joystickHandle.style.transform = `translate(-50%, -50%)`;
 });
