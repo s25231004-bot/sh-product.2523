@@ -24,6 +24,35 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+// Background Clouds
+let clouds = [];
+class Cloud {
+    constructor() {
+        this.reset(true);
+    }
+    reset(initial = false) {
+        this.w = Math.random() * 100 + 50;
+        this.h = this.w * 0.6;
+        this.x = initial ? Math.random() * gameWidth : gameWidth + this.w;
+        this.y = Math.random() * (gameHeight * 0.6);
+        this.speed = Math.random() * 0.5 + 0.2;
+        this.opacity = Math.random() * 0.4 + 0.2;
+    }
+    draw() {
+        ctx.fillStyle = body.classList.contains('dark-mode') ? `rgba(200, 200, 255, ${this.opacity})` : `rgba(255, 255, 255, ${this.opacity})`;
+        ctx.beginPath();
+        ctx.ellipse(this.x, this.y, this.w, this.h, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    update() {
+        this.x -= this.speed;
+        if (this.x + this.w < 0) this.reset();
+    }
+}
+
+// Initial clouds
+for(let i=0; i<8; i++) clouds.push(new Cloud());
+
 // Player
 const player = {
     x: 50,
@@ -100,13 +129,11 @@ class Particle {
     }
 }
 
-// Obstacles
+// Obstacles (Stones)
 let obstacles = [];
 const obstacleConfig = {
-    minWidth: 40,
-    maxWidth: 80,
-    minHeight: 40,
-    maxHeight: 120,
+    minSize: 40,
+    maxSize: 100,
     speed: 3,
     spawnRate: 60,
     frameCounter: 0
@@ -114,19 +141,44 @@ const obstacleConfig = {
 
 class Obstacle {
     constructor() {
-        this.width = Math.random() * (obstacleConfig.maxWidth - obstacleConfig.minWidth) + obstacleConfig.minWidth;
-        this.height = Math.random() * (obstacleConfig.maxHeight - obstacleConfig.minHeight) + obstacleConfig.minHeight;
+        this.size = Math.random() * (obstacleConfig.maxSize - obstacleConfig.minSize) + obstacleConfig.minSize;
+        this.width = this.size;
+        this.height = this.size;
         this.x = gameWidth;
         this.y = Math.random() * (gameHeight - this.height);
-        this.color = body.classList.contains('dark-mode') ? '#ff5722' : '#555';
+        this.color = body.classList.contains('dark-mode') ? '#777' : '#555';
         this.passed = false;
+        
+        // Random polygon points for stone look
+        this.points = [];
+        const numPoints = 6 + Math.floor(Math.random() * 4);
+        for (let i = 0; i < numPoints; i++) {
+            const angle = (i / numPoints) * Math.PI * 2;
+            const radius = (this.size / 2) * (0.7 + Math.random() * 0.3);
+            this.points.push({
+                x: Math.cos(angle) * radius,
+                y: Math.sin(angle) * radius
+            });
+        }
     }
     draw() {
+        ctx.save();
+        ctx.translate(this.x + this.size / 2, this.y + this.size / 2);
         ctx.fillStyle = this.color;
-        ctx.fillRect(this.x, this.y, this.width, this.height);
-        ctx.strokeStyle = '#fff';
+        ctx.beginPath();
+        ctx.moveTo(this.points[0].x, this.points[0].y);
+        for (let i = 1; i < this.points.length; i++) {
+            ctx.lineTo(this.points[i].x, this.points[i].y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        
+        // Detail lines
+        ctx.strokeStyle = body.classList.contains('dark-mode') ? '#555' : '#777';
         ctx.lineWidth = 2;
-        ctx.strokeRect(this.x, this.y, this.width, this.height);
+        ctx.stroke();
+        
+        ctx.restore();
     }
     update() {
         this.x -= obstacleConfig.speed;
@@ -231,6 +283,12 @@ function createExplosion(x, y, color) {
 
 function gameLoop() {
     ctx.clearRect(0, 0, gameWidth, gameHeight);
+
+    // Draw Background Clouds
+    clouds.forEach(cloud => {
+        cloud.update();
+        cloud.draw();
+    });
 
     player.update();
     player.draw();
