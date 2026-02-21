@@ -16,15 +16,13 @@ let animationId;
 let gameWidth, gameHeight;
 
 // Control State
-let isShooting = false;
 let lastShotTime = 0;
 const fireRate = 150;
 
 // Joystick Logic
 let joystickActive = false;
-let joystickOrigin = { x: 0, y: 0 };
 let joystickVector = { x: 0, y: 0 };
-const joystickLimit = 50;
+const joystickLimit = 60;
 
 // Resize canvas
 function resize() {
@@ -43,13 +41,12 @@ const player = {
     y: gameHeight / 2,
     width: 60,
     height: 40,
-    speed: 8, // Increased speed for better responsiveness
+    speed: 12,
     color: '#ffeb3b',
     draw() {
         ctx.save();
         ctx.translate(this.x, this.y + this.height / 2);
 
-        // Body Shadow (Depth)
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
         ctx.beginPath();
         ctx.moveTo(0, 5);
@@ -57,33 +54,29 @@ const player = {
         ctx.lineTo(0, this.height/2 + 5);
         ctx.fill();
 
-        // Main Body (Shaded Starship)
         const shipGrad = ctx.createLinearGradient(0, -this.height/2, 0, this.height/2);
-        shipGrad.addColorStop(0, '#fff176'); // Top highlight
-        shipGrad.addColorStop(0.5, '#fbc02d'); // Mid
-        shipGrad.addColorStop(1, '#f57f17'); // Bottom shadow
+        shipGrad.addColorStop(0, '#fff176');
+        shipGrad.addColorStop(0.5, '#fbc02d');
+        shipGrad.addColorStop(1, '#f57f17');
         
         ctx.fillStyle = shipGrad;
         ctx.beginPath();
         ctx.moveTo(0, -this.height/2);
-        ctx.lineTo(this.width, 0); // Nose
+        ctx.lineTo(this.width, 0);
         ctx.lineTo(0, this.height/2);
-        ctx.lineTo(10, 0); // Inset back
+        ctx.lineTo(10, 0);
         ctx.closePath();
         ctx.fill();
 
-        // Cockpit
         ctx.fillStyle = '#4fc3f7';
         ctx.beginPath();
         ctx.ellipse(25, 0, 12, 6, 0, 0, Math.PI * 2);
         ctx.fill();
-        // Cockpit Highlight
         ctx.fillStyle = 'rgba(255,255,255,0.5)';
         ctx.beginPath();
         ctx.ellipse(22, -2, 5, 2, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Engine Glow
         if (gameRunning) {
             const pulse = Math.sin(Date.now() / 50) * 5;
             const engineGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, 15 + pulse);
@@ -99,13 +92,11 @@ const player = {
         ctx.restore();
     },
     update() {
-        // Move based on joystick vector
         if (joystickActive) {
             this.x += (joystickVector.x / joystickLimit) * this.speed;
             this.y += (joystickVector.y / joystickLimit) * this.speed;
         }
 
-        // Keep in bounds
         if (this.x < 20) this.x = 20;
         if (this.x + this.width > gameWidth - 20) this.x = gameWidth - this.width - 20;
         if (this.y < 20) this.y = 20;
@@ -146,14 +137,12 @@ function handleJoystick(e) {
 joystickContainer.addEventListener('mousedown', (e) => {
     if (gameRunning) {
         joystickActive = true;
-        isShooting = true; // Enable shooting while using joystick
         handleJoystick(e);
     }
 });
 joystickContainer.addEventListener('touchstart', (e) => {
     if (gameRunning) {
         joystickActive = true;
-        isShooting = true; // Enable shooting while using joystick
         handleJoystick(e);
     }
     e.preventDefault();
@@ -164,18 +153,15 @@ window.addEventListener('touchmove', handleJoystick, { passive: false });
 
 window.addEventListener('mouseup', () => {
     joystickActive = false;
-    isShooting = false; // Stop shooting when released
     joystickVector = { x: 0, y: 0 };
     joystickHandle.style.transform = `translate(-50%, -50%)`;
 });
 window.addEventListener('touchend', () => {
     joystickActive = false;
-    isShooting = false; // Stop shooting when released
     joystickVector = { x: 0, y: 0 };
     joystickHandle.style.transform = `translate(-50%, -50%)`;
 });
 
-// Other classes (Cloud, Bullet, Particle, Obstacle) remain similar but with current styles
 let clouds = [];
 class Cloud {
     constructor() { this.reset(true); }
@@ -285,7 +271,6 @@ class Obstacle {
     update() { this.x -= obstacleConfig.speed; }
 }
 
-// Audio
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 function playShootSound() {
     if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -317,7 +302,6 @@ function playExplosionSound() {
     whiteNoise.start(); whiteNoise.stop(audioCtx.currentTime + 0.1);
 }
 
-// Main logic
 function shoot() {
     const now = Date.now();
     if (now - lastShotTime > fireRate) {
@@ -326,16 +310,6 @@ function shoot() {
         lastShotTime = now;
     }
 }
-
-// Controls
-window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && gameRunning) isShooting = true;
-});
-window.addEventListener('keyup', (e) => { if (e.code === 'Space') isShooting = false; });
-canvas.addEventListener('mousedown', () => { if (gameRunning) isShooting = true; });
-window.addEventListener('mouseup', () => isShooting = false);
-canvas.addEventListener('touchstart', (e) => { if (gameRunning) isShooting = true; }, { passive: false });
-canvas.addEventListener('touchend', () => isShooting = false);
 
 themeToggle.addEventListener('click', () => {
     body.classList.toggle('dark-mode');
@@ -351,7 +325,7 @@ function createExplosion(x, y, color) {
 
 function gameLoop() {
     ctx.clearRect(0, 0, gameWidth, gameHeight);
-    if (isShooting && gameRunning) shoot();
+    if (gameRunning) shoot();
     clouds.forEach(c => { c.update(); c.draw(); });
     player.update();
     player.draw();
@@ -395,14 +369,14 @@ function gameLoop() {
 function startGame() {
     score = 0; scoreDisplay.textContent = `Score: ${score}`;
     obstacles = []; bullets = []; particles = [];
-    isShooting = false; obstacleConfig.speed = 3; obstacleConfig.frameCounter = 0;
+    obstacleConfig.speed = 3; obstacleConfig.frameCounter = 0;
     player.x = 100; player.y = gameHeight / 2;
     gameRunning = true; startBtn.style.display = 'none';
     gameLoop();
 }
 
 function gameOver() {
-    gameRunning = false; isShooting = false;
+    gameRunning = false;
     cancelAnimationFrame(animationId);
     startBtn.style.display = 'block';
     startBtn.textContent = 'Game Over! Restart?';
