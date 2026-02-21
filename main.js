@@ -19,6 +19,9 @@ let gameWidth, gameHeight;
 let lastShotTime = 0;
 const fireRate = 150;
 
+// Power-up State
+let powerLevel = 1; // Number of bullet streams
+
 // Joystick Logic
 let joystickActive = false;
 let joystickVector = { x: 0, y: 0 };
@@ -188,9 +191,13 @@ for(let i=0; i<8; i++) clouds.push(new Cloud());
 
 let bullets = [];
 class Bullet {
-    constructor(x, y) {
-        this.x = x; this.y = y;
-        this.radius = 4; this.speed = 12; this.color = '#00e5ff';
+    constructor(x, y, angle = 0) {
+        this.x = x;
+        this.y = y;
+        this.radius = 4;
+        this.speed = 12;
+        this.angle = angle;
+        this.color = '#00e5ff';
     }
     draw() {
         ctx.shadowBlur = 10;
@@ -201,7 +208,40 @@ class Bullet {
         ctx.fill();
         ctx.shadowBlur = 0;
     }
-    update() { this.x += this.speed; }
+    update() {
+        this.x += Math.cos(this.angle) * this.speed;
+        this.y += Math.sin(this.angle) * this.speed;
+    }
+}
+
+// Items (Power-ups)
+let items = [];
+class Item {
+    constructor() {
+        this.radius = 15;
+        this.x = gameWidth + this.radius;
+        this.y = Math.random() * (gameHeight - this.radius * 2) + this.radius;
+        this.speed = 2;
+        this.color = '#ff4081';
+    }
+    draw() {
+        const pulse = Math.sin(Date.now() / 100) * 5;
+        ctx.shadowBlur = 15 + pulse;
+        ctx.shadowColor = this.color;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        // Inner white circle
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+    update() {
+        this.x -= this.speed;
+    }
 }
 
 let particles = [];
@@ -301,11 +341,43 @@ function playExplosionSound() {
     whiteNoise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
     whiteNoise.start(); whiteNoise.stop(audioCtx.currentTime + 0.1);
 }
+function playPowerUpSound() {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+}
 
 function shoot() {
     const now = Date.now();
     if (now - lastShotTime > fireRate) {
-        bullets.push(new Bullet(player.x + player.width, player.y + player.height / 2));
+        const startX = player.x + player.width;
+        const startY = player.y + player.height / 2;
+        
+        if (powerLevel === 1) {
+            bullets.push(new Bullet(startX, startY, 0));
+        } else if (powerLevel === 2) {
+            bullets.push(new Bullet(startX, startY - 10, 0));
+            bullets.push(new Bullet(startX, startY + 10, 0));
+        } else if (powerLevel === 3) {
+            bullets.push(new Bullet(startX, startY, 0));
+            bullets.push(new Bullet(startX, startY, -0.1));
+            bullets.push(new Bullet(startX, startY, 0.1));
+        } else {
+            // Level 4+
+            bullets.push(new Bullet(startX, startY, 0));
+            bullets.push(new Bullet(startX, startY, -0.1));
+            bullets.push(new Bullet(startX, startY, 0.1));
+            bullets.push(new Bullet(startX, startY, -0.2));
+            bullets.push(new Bullet(startX, startY, 0.2));
+        }
+        
         playShootSound();
         lastShotTime = now;
     }
@@ -329,9 +401,32 @@ function gameLoop() {
     clouds.forEach(c => { c.update(); c.draw(); });
     player.update();
     player.draw();
+
+    // Items
+    if (Math.random() < 0.005) items.push(new Item()); // Random spawn
+    for (let i = items.length - 1; i >= 0; i--) {
+        const item = items[i];
+        item.update();
+        item.draw();
+
+        // Player collision
+        const dx = (player.x + player.width/2) - item.x;
+        const dy = (player.y + player.height/2) - item.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < player.width/2 + item.radius) {
+            powerLevel++;
+            items.splice(i, 1);
+            playPowerUpSound();
+            score += 50;
+            scoreDisplay.textContent = `Score: ${score}`;
+        } else if (item.x + item.radius < 0) {
+            items.splice(i, 1);
+        }
+    }
+
     for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i]; b.update(); b.draw();
-        if (b.x > gameWidth) bullets.splice(i, 1);
+        if (b.x > gameWidth || b.y < 0 || b.y > gameHeight) bullets.splice(i, 1);
     }
     for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i]; p.update(); p.draw();
@@ -368,7 +463,8 @@ function gameLoop() {
 
 function startGame() {
     score = 0; scoreDisplay.textContent = `Score: ${score}`;
-    obstacles = []; bullets = []; particles = [];
+    obstacles = []; bullets = []; particles = []; items = [];
+    powerLevel = 1;
     obstacleConfig.speed = 3; obstacleConfig.frameCounter = 0;
     player.x = 100; player.y = gameHeight / 2;
     gameRunning = true; startBtn.style.display = 'none';
