@@ -105,6 +105,30 @@ class Obstacle {
     }
 }
 
+// Sound Effects using Web Audio API
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playShootSound() {
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    oscillator.type = 'square';
+    oscillator.frequency.setValueAtTime(150, audioCtx.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+
+    gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    oscillator.start();
+    oscillator.stop(audioCtx.currentTime + 0.1);
+}
+
 // Input handling
 canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
@@ -114,12 +138,14 @@ canvas.addEventListener('mousemove', (e) => {
 canvas.addEventListener('mousedown', () => {
     if (gameRunning) {
         bullets.push(new Bullet(player.x + player.width, player.y + player.height / 2));
+        playShootSound();
     }
 });
 
 window.addEventListener('keydown', (e) => {
     if (e.code === 'Space' && gameRunning) {
         bullets.push(new Bullet(player.x + player.width, player.y + player.height / 2));
+        playShootSound();
     }
 });
 
@@ -132,6 +158,7 @@ canvas.addEventListener('touchmove', (e) => {
 canvas.addEventListener('touchstart', (e) => {
     if (gameRunning) {
         bullets.push(new Bullet(player.x + player.width, player.y + player.height / 2));
+        playShootSound();
     }
 }, { passive: false });
 
