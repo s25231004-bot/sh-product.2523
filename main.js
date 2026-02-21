@@ -13,6 +13,11 @@ let gameRunning = false;
 let animationId;
 let gameWidth, gameHeight;
 
+// Shooting State
+let isShooting = false;
+let lastShotTime = 0;
+const fireRate = 150; // Milliseconds between shots
+
 // Resize canvas
 function resize() {
     const container = document.getElementById('game-container');
@@ -49,8 +54,6 @@ class Cloud {
         if (this.x + this.w < 0) this.reset();
     }
 }
-
-// Initial clouds
 for(let i=0; i<8; i++) clouds.push(new Cloud());
 
 // Player
@@ -87,7 +90,7 @@ class Bullet {
         this.x = x;
         this.y = y;
         this.radius = 4;
-        this.speed = 10;
+        this.speed = 12;
         this.color = '#ffeb3b';
     }
     draw() {
@@ -95,6 +98,9 @@ class Bullet {
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fill();
+        // Bullet glow
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = this.color;
     }
     update() {
         this.x += this.speed;
@@ -129,11 +135,11 @@ class Particle {
     }
 }
 
-// Obstacles (Stones)
+// Obstacles (Realistic Stones)
 let obstacles = [];
 const obstacleConfig = {
     minSize: 40,
-    maxSize: 100,
+    maxSize: 90,
     speed: 3,
     spawnRate: 60,
     frameCounter: 0
@@ -146,25 +152,38 @@ class Obstacle {
         this.height = this.size;
         this.x = gameWidth;
         this.y = Math.random() * (gameHeight - this.height);
-        this.color = body.classList.contains('dark-mode') ? '#777' : '#555';
+        this.baseColor = body.classList.contains('dark-mode') ? '#444' : '#666';
         this.passed = false;
         
-        // Random polygon points for stone look
+        // Random polygon points
         this.points = [];
-        const numPoints = 6 + Math.floor(Math.random() * 4);
+        const numPoints = 7 + Math.floor(Math.random() * 5);
         for (let i = 0; i < numPoints; i++) {
             const angle = (i / numPoints) * Math.PI * 2;
-            const radius = (this.size / 2) * (0.7 + Math.random() * 0.3);
-            this.points.push({
-                x: Math.cos(angle) * radius,
-                y: Math.sin(angle) * radius
+            const r = (this.size / 2) * (0.8 + Math.random() * 0.4);
+            this.points.push({ x: Math.cos(angle) * r, y: Math.sin(angle) * r });
+        }
+        
+        // Craters/Texture details
+        this.details = [];
+        for (let i = 0; i < 3; i++) {
+            this.details.push({
+                x: (Math.random() - 0.5) * this.size * 0.5,
+                y: (Math.random() - 0.5) * this.size * 0.5,
+                r: Math.random() * (this.size * 0.15) + 5
             });
         }
     }
     draw() {
         ctx.save();
         ctx.translate(this.x + this.size / 2, this.y + this.size / 2);
-        ctx.fillStyle = this.color;
+        
+        // 1. Draw main body with gradient for volume
+        const grad = ctx.createRadialGradient(-this.size/4, -this.size/4, 0, 0, 0, this.size);
+        grad.addColorStop(0, body.classList.contains('dark-mode') ? '#666' : '#999'); // Light side
+        grad.addColorStop(1, this.baseColor); // Shadow side
+        
+        ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.moveTo(this.points[0].x, this.points[0].y);
         for (let i = 1; i < this.points.length; i++) {
@@ -173,21 +192,32 @@ class Obstacle {
         ctx.closePath();
         ctx.fill();
         
-        // Detail lines
-        ctx.strokeStyle = body.classList.contains('dark-mode') ? '#555' : '#777';
+        // 2. Draw details (crater-like depth)
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        this.details.forEach(d => {
+            ctx.beginPath();
+            ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+            ctx.fill();
+            // Highlight edge of crater
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            ctx.stroke();
+        });
+
+        // 3. Highlight edges
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
         ctx.lineWidth = 2;
         ctx.stroke();
         
         ctx.restore();
+        ctx.shadowBlur = 0; // Reset shadow for other draws
     }
     update() {
         this.x -= obstacleConfig.speed;
     }
 }
 
-// Sound Effects using Web Audio API
+// Sound Effects
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
 function playShootSound() {
     if (audioCtx.state === 'suspended') audioCtx.resume();
     const osc = audioCtx.createOscillator();
@@ -195,7 +225,7 @@ function playShootSound() {
     osc.type = 'square';
     osc.frequency.setValueAtTime(150, audioCtx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
     osc.connect(gain);
     gain.connect(audioCtx.destination);
@@ -207,9 +237,7 @@ function playExplosionSound() {
     if (audioCtx.state === 'suspended') audioCtx.resume();
     const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
     const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < noiseBuffer.length; i++) {
-        output[i] = Math.random() * 2 - 1;
-    }
+    for (let i = 0; i < noiseBuffer.length; i++) output[i] = Math.random() * 2 - 1;
     const whiteNoise = audioCtx.createBufferSource();
     whiteNoise.buffer = noiseBuffer;
     const filter = audioCtx.createBiquadFilter();
@@ -226,24 +254,30 @@ function playExplosionSound() {
     whiteNoise.stop(audioCtx.currentTime + 0.1);
 }
 
+// Auto-fire Trigger logic
+function shoot() {
+    const now = Date.now();
+    if (now - lastShotTime > fireRate) {
+        bullets.push(new Bullet(player.x + player.width, player.y + player.height / 2));
+        playShootSound();
+        lastShotTime = now;
+    }
+}
+
 // Input handling
 canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
     player.targetY = (e.clientY - rect.top) * (canvas.height / rect.height);
 });
 
-canvas.addEventListener('mousedown', () => {
-    if (gameRunning) {
-        bullets.push(new Bullet(player.x + player.width, player.y + player.height / 2));
-        playShootSound();
-    }
-});
+canvas.addEventListener('mousedown', () => { if (gameRunning) isShooting = true; });
+window.addEventListener('mouseup', () => isShooting = false);
 
 window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && gameRunning) {
-        bullets.push(new Bullet(player.x + player.width, player.y + player.height / 2));
-        playShootSound();
-    }
+    if (e.code === 'Space' && gameRunning) isShooting = true;
+});
+window.addEventListener('keyup', (e) => {
+    if (e.code === 'Space') isShooting = false;
 });
 
 canvas.addEventListener('touchmove', (e) => {
@@ -253,11 +287,9 @@ canvas.addEventListener('touchmove', (e) => {
 }, { passive: false });
 
 canvas.addEventListener('touchstart', (e) => {
-    if (gameRunning) {
-        bullets.push(new Bullet(player.x + player.width, player.y + player.height / 2));
-        playShootSound();
-    }
+    if (gameRunning) isShooting = true;
 }, { passive: false });
+canvas.addEventListener('touchend', () => isShooting = false);
 
 // Theme
 themeToggle.addEventListener('click', () => {
@@ -266,7 +298,6 @@ themeToggle.addEventListener('click', () => {
     themeToggle.textContent = isDark ? 'Light Mode' : 'Dark Mode';
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
 });
-
 if (localStorage.getItem('theme') === 'dark') {
     body.classList.add('dark-mode');
     themeToggle.textContent = 'Light Mode';
@@ -275,31 +306,31 @@ if (localStorage.getItem('theme') === 'dark') {
 highScoreDisplay.textContent = `High Score: ${highScore}`;
 
 function createExplosion(x, y, color) {
-    for (let i = 0; i < 20; i++) {
-        particles.push(new Particle(x, y, color));
-    }
+    for (let i = 0; i < 20; i++) particles.push(new Particle(x, y, color));
     playExplosionSound();
 }
 
 function gameLoop() {
     ctx.clearRect(0, 0, gameWidth, gameHeight);
 
+    // Auto-fire check
+    if (isShooting && gameRunning) shoot();
+
     // Draw Background Clouds
-    clouds.forEach(cloud => {
-        cloud.update();
-        cloud.draw();
-    });
+    clouds.forEach(cloud => { cloud.update(); cloud.draw(); });
 
     player.update();
     player.draw();
 
     // Update & Draw Bullets
+    ctx.shadowBlur = 0; // Ensure shadow doesn't bleed
     for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         b.update();
         b.draw();
         if (b.x > gameWidth) bullets.splice(i, 1);
     }
+    ctx.shadowBlur = 0;
 
     // Update & Draw Particles
     for (let i = particles.length - 1; i >= 0; i--) {
@@ -338,7 +369,7 @@ function gameLoop() {
                 b.x > obs.x && b.x < obs.x + obs.width &&
                 b.y > obs.y && b.y < obs.y + obs.height
             ) {
-                createExplosion(obs.x + obs.width / 2, obs.y + obs.height / 2, obs.color);
+                createExplosion(obs.x + obs.width / 2, obs.y + obs.height / 2, obs.baseColor);
                 obstacles.splice(i, 1);
                 bullets.splice(j, 1);
                 score += 5;
@@ -358,9 +389,7 @@ function gameLoop() {
         }
     }
 
-    if (gameRunning) {
-        animationId = requestAnimationFrame(gameLoop);
-    }
+    if (gameRunning) animationId = requestAnimationFrame(gameLoop);
 }
 
 function startGame() {
@@ -369,6 +398,7 @@ function startGame() {
     obstacles = [];
     bullets = [];
     particles = [];
+    isShooting = false;
     obstacleConfig.speed = 3;
     obstacleConfig.frameCounter = 0;
     gameRunning = true;
@@ -378,10 +408,10 @@ function startGame() {
 
 function gameOver() {
     gameRunning = false;
+    isShooting = false;
     cancelAnimationFrame(animationId);
     startBtn.style.display = 'block';
     startBtn.textContent = 'Game Over! Restart?';
-    
     if (score > highScore) {
         highScore = score;
         localStorage.setItem('highScore', highScore);
