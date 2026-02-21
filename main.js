@@ -72,6 +72,34 @@ class Bullet {
     }
 }
 
+// Particles for Explosion
+let particles = [];
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.size = Math.random() * 5 + 2;
+        this.speedX = (Math.random() - 0.5) * 10;
+        this.speedY = (Math.random() - 0.5) * 10;
+        this.life = 1.0;
+        this.decay = Math.random() * 0.05 + 0.02;
+    }
+    draw() {
+        ctx.globalAlpha = this.life;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+    }
+    update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
+        this.life -= this.decay;
+    }
+}
+
 // Obstacles
 let obstacles = [];
 const obstacleConfig = {
@@ -90,7 +118,7 @@ class Obstacle {
         this.height = Math.random() * (obstacleConfig.maxHeight - obstacleConfig.minHeight) + obstacleConfig.minHeight;
         this.x = gameWidth;
         this.y = Math.random() * (gameHeight - this.height);
-        this.color = body.classList.contains('dark-mode') ? '#ccc' : '#555';
+        this.color = body.classList.contains('dark-mode') ? '#ff5722' : '#555';
         this.passed = false;
     }
     draw() {
@@ -109,24 +137,41 @@ class Obstacle {
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 function playShootSound() {
-    if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.1);
+}
+
+function playExplosionSound() {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noiseBuffer.length; i++) {
+        output[i] = Math.random() * 2 - 1;
     }
-    const oscillator = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
-
-    oscillator.type = 'square';
-    oscillator.frequency.setValueAtTime(150, audioCtx.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-
-    gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-
-    oscillator.start();
-    oscillator.stop(audioCtx.currentTime + 0.1);
+    const whiteNoise = audioCtx.createBufferSource();
+    whiteNoise.buffer = noiseBuffer;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(1000, audioCtx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+    whiteNoise.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    whiteNoise.start();
+    whiteNoise.stop(audioCtx.currentTime + 0.1);
 }
 
 // Input handling
@@ -177,6 +222,13 @@ if (localStorage.getItem('theme') === 'dark') {
 
 highScoreDisplay.textContent = `High Score: ${highScore}`;
 
+function createExplosion(x, y, color) {
+    for (let i = 0; i < 20; i++) {
+        particles.push(new Particle(x, y, color));
+    }
+    playExplosionSound();
+}
+
 function gameLoop() {
     ctx.clearRect(0, 0, gameWidth, gameHeight);
 
@@ -189,6 +241,14 @@ function gameLoop() {
         b.update();
         b.draw();
         if (b.x > gameWidth) bullets.splice(i, 1);
+    }
+
+    // Update & Draw Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.update();
+        p.draw();
+        if (p.life <= 0) particles.splice(i, 1);
     }
 
     // Obstacles
@@ -204,33 +264,31 @@ function gameLoop() {
         obs.update();
         obs.draw();
 
-        // Player Collision
         if (
             player.x < obs.x + obs.width &&
             player.x + player.width > obs.x &&
             player.y < obs.y + obs.height &&
             player.y + player.height > obs.y
         ) {
+            createExplosion(player.x + player.width / 2, player.y + player.height / 2, '#ffeb3b');
             gameOver();
         }
 
-        // Bullet Collision
         for (let j = bullets.length - 1; j >= 0; j--) {
             const b = bullets[j];
             if (
                 b.x > obs.x && b.x < obs.x + obs.width &&
                 b.y > obs.y && b.y < obs.y + obs.height
             ) {
-                // Hit!
+                createExplosion(obs.x + obs.width / 2, obs.y + obs.height / 2, obs.color);
                 obstacles.splice(i, 1);
                 bullets.splice(j, 1);
-                score += 5; // Extra points for shooting
+                score += 5;
                 scoreDisplay.textContent = `Score: ${score}`;
                 break;
             }
         }
 
-        // Scoring for passing
         if (obs && !obs.passed && obs.x + obs.width < player.x) {
             score++;
             obs.passed = true;
@@ -252,6 +310,7 @@ function startGame() {
     scoreDisplay.textContent = `Score: ${score}`;
     obstacles = [];
     bullets = [];
+    particles = [];
     obstacleConfig.speed = 3;
     obstacleConfig.frameCounter = 0;
     gameRunning = true;
