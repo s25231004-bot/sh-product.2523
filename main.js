@@ -44,7 +44,7 @@ const player = {
     y: gameHeight / 2,
     width: 60,
     height: 40,
-    speed: 12,
+    speed: 8,
     color: '#ffeb3b',
     draw() {
         ctx.save();
@@ -403,7 +403,7 @@ function gameLoop() {
     player.draw();
 
     // Items
-    if (Math.random() < 0.005) items.push(new Item()); // Random spawn
+    if (Math.random() < 0.002) items.push(new Item()); // Reduced spawn probability
     for (let i = items.length - 1; i >= 0; i--) {
         const item = items[i];
         item.update();
