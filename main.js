@@ -6,7 +6,25 @@ const startBtn = document.getElementById('start-btn');
 const themeToggle = document.getElementById('theme-toggle');
 const joystickContainer = document.getElementById('joystick-container');
 const joystickHandle = document.getElementById('joystick-handle');
+const partnerBtn = document.getElementById('partner-btn');
+const contactModal = document.getElementById('contact-modal');
+const closeBtn = document.querySelector('.close-btn');
 const body = document.body;
+
+// Modal Logic
+partnerBtn.addEventListener('click', () => {
+    contactModal.style.display = 'flex';
+});
+
+closeBtn.addEventListener('click', () => {
+    contactModal.style.display = 'none';
+});
+
+window.addEventListener('click', (e) => {
+    if (e.target === contactModal) {
+        contactModal.style.display = 'none';
+    }
+});
 
 // Game State
 let score = 0;
@@ -44,7 +62,7 @@ const player = {
     y: gameHeight / 2,
     width: 60,
     height: 40,
-    speed: 8,
+    speed: 8, // Reduced speed for better control
     color: '#ffeb3b',
     draw() {
         ctx.save();
@@ -370,7 +388,6 @@ function shoot() {
             bullets.push(new Bullet(startX, startY, -0.1));
             bullets.push(new Bullet(startX, startY, 0.1));
         } else {
-            // Level 4+
             bullets.push(new Bullet(startX, startY, 0));
             bullets.push(new Bullet(startX, startY, -0.1));
             bullets.push(new Bullet(startX, startY, 0.1));
@@ -402,14 +419,12 @@ function gameLoop() {
     player.update();
     player.draw();
 
-    // Items
-    if (Math.random() < 0.002) items.push(new Item()); // Reduced spawn probability
+    if (gameRunning && Math.random() < 0.002) items.push(new Item());
     for (let i = items.length - 1; i >= 0; i--) {
         const item = items[i];
         item.update();
         item.draw();
 
-        // Player collision
         const dx = (player.x + player.width/2) - item.x;
         const dy = (player.y + player.height/2) - item.y;
         const dist = Math.sqrt(dx*dx + dy*dy);
